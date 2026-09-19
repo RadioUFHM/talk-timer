@@ -103,7 +103,7 @@ async function requestMic() {
   } catch (err) {
     micStream = await navigator.mediaDevices.getUserMedia({ audio: baseConstraints });
   }
-  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  audioCtx = new (window.AudioContext || window["webkitAudioContext"])();
   const source = audioCtx.createMediaStreamSource(micStream);
   analyser = audioCtx.createAnalyser();
   analyser.fftSize = 1024;
@@ -122,6 +122,10 @@ function currentRms() {
 }
 
 function stopAudio() {
+  if (streamRefreshTimer) {
+    clearInterval(streamRefreshTimer);
+    streamRefreshTimer = null;
+  }
   if (micStream) {
     micStream.getTracks().forEach((t) => t.stop());
     micStream = null;
@@ -132,14 +136,51 @@ function stopAudio() {
   }
 }
 
+// Many phones run hardware-level noise suppression/beamforming that
+// adapts within the first second or two of a capture session, locking
+// onto the loudest/nearest voice and clamping everything else down —
+// this happens below the web page, so disabling constraints doesn't
+// stop it. Periodically closing and reopening the mic stream forces a
+// fresh capture session on the OS side, which resets that adaptation
+// before it fully suppresses anyone else. Session timers/streaks are
+// untouched — only the underlying audio pipeline is swapped.
+const STREAM_REFRESH_MS = 20000;
+let streamRefreshTimer = null;
+
+async function refreshMicStream() {
+  const oldStream = micStream;
+  const oldCtx = audioCtx;
+  try {
+    await requestMic();
+  } catch (err) {
+    return; // keep using the existing stream if reacquiring fails
+  }
+  if (oldStream) oldStream.getTracks().forEach((t) => t.stop());
+  if (oldCtx) oldCtx.close();
+}
+
 // ---------- calibration ----------
+// Each phase gets a short "get ready" beat before recording starts —
+// otherwise the window starts counting down before anyone has actually
+// begun talking, which eats into the (already short) capture time.
+function leadIn(instructionText, ms) {
+  calibrateInstructions.textContent = "Get ready: " + instructionText;
+  calibrateProgress.style.width = "0%";
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function runCalibration() {
   calibrateBtn.disabled = true;
 
+  await leadIn("stay quiet for a moment.", 800);
   const quietSamples = await sampleFor(2000, "Stay quiet for a moment…");
-  const selfSamples = await sampleFor(3000, "Now talk normally, like you're chatting…");
+
+  await leadIn("you'll talk next.", 1200);
+  const selfSamples = await sampleFor(4000, "Now talk normally, like you're chatting…");
+
+  await leadIn("someone else will talk next.", 1500);
   const otherSamples = await sampleFor(
-    4000,
+    7000,
     "Now have someone else talk normally, at the distance they'd usually be sitting or standing…"
   );
 
@@ -226,6 +267,8 @@ function startSession() {
   smoothedLevel = 0;
   confirmedState = "silence";
   candidateState = "silence";
+  if (streamRefreshTimer) clearInterval(streamRefreshTimer);
+  streamRefreshTimer = setInterval(refreshMicStream, STREAM_REFRESH_MS);
   lastFrameTime = performance.now();
   rafHandle = requestAnimationFrame(loop);
 }
@@ -324,6 +367,10 @@ function formatTime(totalSeconds) {
 
 function endSession() {
   if (rafHandle) cancelAnimationFrame(rafHandle);
+  if (streamRefreshTimer) {
+    clearInterval(streamRefreshTimer);
+    streamRefreshTimer = null;
+  }
   const total = youSeconds + otherSeconds;
   const youPct = total > 0 ? Math.round((youSeconds / total) * 100) : 0;
   summaryText.textContent = total > 0
