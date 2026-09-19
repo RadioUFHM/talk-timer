@@ -9,6 +9,11 @@ const summaryCard = document.getElementById("summaryCard");
 const micBtn = document.getElementById("micBtn");
 const micError = document.getElementById("micError");
 
+const calibrateChoice = document.getElementById("calibrateChoice");
+const calibrateFresh = document.getElementById("calibrateFresh");
+const lastCalibrationText = document.getElementById("lastCalibrationText");
+const useLastCalibrationBtn = document.getElementById("useLastCalibrationBtn");
+const recalibrateFreshBtn = document.getElementById("recalibrateFreshBtn");
 const calibrateBtn = document.getElementById("calibrateBtn");
 const calibrateInstructions = document.getElementById("calibrateInstructions");
 const calibrateProgress = document.getElementById("calibrateProgress");
@@ -43,7 +48,7 @@ const settings = {
 
 function loadSettings() {
   try {
-    const saved = JSON.parse(localStorage.getItem("talkTimerSettings") || "{}");
+    const saved = JSON.parse(localStorage.getItem("losiMachineSettings") || "{}");
     Object.assign(settings, saved);
   } catch (_) { /* ignore corrupt/missing settings, defaults stand */ }
   streakThresholdSel.value = String(settings.streakThresholdSec);
@@ -55,7 +60,23 @@ function saveSettings() {
   settings.streakThresholdSec = Number(streakThresholdSel.value);
   settings.shareThreshold = Number(shareThresholdSel.value);
   settings.vibrate = vibrateToggle.checked;
-  localStorage.setItem("talkTimerSettings", JSON.stringify(settings));
+  localStorage.setItem("losiMachineSettings", JSON.stringify(settings));
+}
+
+// ---------- saved calibration (thresholds only — never audio) ----------
+function loadSavedCalibration() {
+  try {
+    return JSON.parse(localStorage.getItem("losiMachineCalibration"));
+  } catch (_) {
+    return null;
+  }
+}
+
+function saveCalibration() {
+  localStorage.setItem(
+    "losiMachineCalibration",
+    JSON.stringify({ silenceThresholdDb, selfThresholdDb, ts: Date.now() })
+  );
 }
 
 // ---------- audio ----------
@@ -122,6 +143,7 @@ function currentRms() {
 }
 
 function stopAudio() {
+  releaseWakeLock();
   if (streamRefreshTimer) {
     clearInterval(streamRefreshTimer);
     streamRefreshTimer = null;
@@ -195,6 +217,7 @@ async function runCalibration() {
 
   silenceThresholdDb = noiseFloorDb + (otherDb - noiseFloorDb) * 0.5;
   selfThresholdDb = otherDb + (selfDb - otherDb) * 0.5;
+  saveCalibration();
 
   calibrateBtn.disabled = false;
   showCard(liveCard);
@@ -250,6 +273,34 @@ let lastVibrateTime = 0;
 let rafHandle = null;
 let lastFrameTime = 0;
 
+// Keeps the screen from sleeping mid-conversation — if it locks, the
+// tracking loop and mic capture both get throttled/suspended by the OS,
+// so timers silently stop without any indication. Released whenever the
+// session ends, and Android auto-releases it if the app is backgrounded,
+// so it's re-requested on visibilitychange while a session is live.
+let wakeLock = null;
+
+async function acquireWakeLock() {
+  try {
+    if ("wakeLock" in navigator) {
+      wakeLock = await navigator.wakeLock.request("screen");
+    }
+  } catch (_) { /* not fatal — tracking still works, screen just may sleep */ }
+}
+
+function releaseWakeLock() {
+  if (wakeLock) {
+    wakeLock.release().catch(() => {});
+    wakeLock = null;
+  }
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && rafHandle) {
+    acquireWakeLock();
+  }
+});
+
 function classify(rmsLevel) {
   const db = toDb(rmsLevel);
   if (db >= selfThresholdDb) return "you";
@@ -269,6 +320,7 @@ function startSession() {
   candidateState = "silence";
   if (streamRefreshTimer) clearInterval(streamRefreshTimer);
   streamRefreshTimer = setInterval(refreshMicStream, STREAM_REFRESH_MS);
+  acquireWakeLock();
   lastFrameTime = performance.now();
   rafHandle = requestAnimationFrame(loop);
 }
@@ -366,11 +418,7 @@ function formatTime(totalSeconds) {
 }
 
 function endSession() {
-  if (rafHandle) cancelAnimationFrame(rafHandle);
-  if (streamRefreshTimer) {
-    clearInterval(streamRefreshTimer);
-    streamRefreshTimer = null;
-  }
+  stopSessionInfra();
   const total = youSeconds + otherSeconds;
   const youPct = total > 0 ? Math.round((youSeconds / total) * 100) : 0;
   summaryText.textContent = total > 0
@@ -384,12 +432,43 @@ function showCard(card) {
   [introCard, calibrateCard, liveCard, summaryCard].forEach((c) => (c.hidden = c !== card));
 }
 
+function showFreshCalibration() {
+  calibrateChoice.hidden = true;
+  calibrateFresh.hidden = false;
+  calibrateProgress.style.width = "0%";
+  calibrateBtn.disabled = false;
+  calibrateInstructions.textContent = "Stay quiet for a moment so I can learn the room's background noise.";
+}
+
+function showCalibrateStep() {
+  showCard(calibrateCard);
+  const saved = loadSavedCalibration();
+  if (saved) {
+    calibrateChoice.hidden = false;
+    calibrateFresh.hidden = true;
+    const when = new Date(saved.ts);
+    lastCalibrationText.textContent = `Using your calibration from ${when.toLocaleDateString()} ${when.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}. Room noise and seating can change how well it fits.`;
+  } else {
+    showFreshCalibration();
+  }
+}
+
+function stopSessionInfra() {
+  if (rafHandle) cancelAnimationFrame(rafHandle);
+  rafHandle = null;
+  if (streamRefreshTimer) {
+    clearInterval(streamRefreshTimer);
+    streamRefreshTimer = null;
+  }
+  releaseWakeLock();
+}
+
 micBtn.addEventListener("click", async () => {
   micError.hidden = true;
   micBtn.disabled = true;
   try {
     await requestMic();
-    showCard(calibrateCard);
+    showCalibrateStep();
   } catch (err) {
     micError.hidden = false;
     micError.textContent = "Couldn't access the microphone. Check site permissions and try again.";
@@ -399,16 +478,23 @@ micBtn.addEventListener("click", async () => {
 
 calibrateBtn.addEventListener("click", runCalibration);
 
+useLastCalibrationBtn.addEventListener("click", () => {
+  const saved = loadSavedCalibration();
+  if (saved) {
+    silenceThresholdDb = saved.silenceThresholdDb;
+    selfThresholdDb = saved.selfThresholdDb;
+  }
+  showCard(liveCard);
+  startSession();
+});
+
+recalibrateFreshBtn.addEventListener("click", showFreshCalibration);
+
 stopBtn.addEventListener("click", () => {
   endSession();
 });
 
-newSessionBtn.addEventListener("click", () => {
-  showCard(calibrateCard);
-  calibrateProgress.style.width = "0%";
-  calibrateInstructions.textContent = "Stay quiet for a moment so I can learn the room's background noise.";
-  calibrateBtn.disabled = false;
-});
+newSessionBtn.addEventListener("click", showCalibrateStep);
 
 settingsBtn.addEventListener("click", () => (settingsOverlay.hidden = false));
 closeSettingsBtn.addEventListener("click", () => {
@@ -419,9 +505,9 @@ closeSettingsBtn.addEventListener("click", () => {
 recalibrateBtn.addEventListener("click", () => {
   saveSettings();
   settingsOverlay.hidden = true;
-  if (rafHandle) cancelAnimationFrame(rafHandle);
+  stopSessionInfra();
   showCard(calibrateCard);
-  calibrateProgress.style.width = "0%";
+  showFreshCalibration();
 });
 
 window.addEventListener("beforeunload", stopAudio);

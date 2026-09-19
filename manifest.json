@@ -1,6 +1,6 @@
 {
-  "name": "Talk Timer",
-  "short_name": "TalkTimer",
+  "name": "Losi Machine",
+  "short_name": "Losi Machine",
   "description": "Tracks how long you've been talking and gives a gentle nudge to pause. Nothing is ever recorded or stored.",
   "start_url": "./index.html",
   "scope": "./",
