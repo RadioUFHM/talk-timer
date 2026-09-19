@@ -1,0 +1,236 @@
+:root {
+  --bg: #0f172a;
+  --card-bg: #1a2438;
+  --text: #e8ecf4;
+  --muted: #93a1b8;
+  --you: #38bdf8;
+  --you-alert: #f97316;
+  --other: #64748b;
+  --danger: #ef4444;
+  --radius: 16px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  min-height: 100dvh;
+  padding: env(safe-area-inset-top) 16px env(safe-area-inset-bottom);
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 4px 8px;
+}
+
+.app-header h1 {
+  font-size: 1.3rem;
+  margin: 0;
+}
+
+.icon-btn {
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 1.4rem;
+  padding: 8px;
+  cursor: pointer;
+}
+
+main {
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.card {
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin: 12px 0;
+}
+
+.card h2 {
+  margin-top: 0;
+  font-size: 1.1rem;
+}
+
+.card p {
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.privacy-note {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.error-text {
+  color: var(--danger);
+  font-size: 0.9rem;
+}
+
+.primary-btn, .secondary-btn {
+  width: 100%;
+  border: none;
+  border-radius: 12px;
+  padding: 16px;
+  font-size: 1.05rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 8px;
+}
+
+.primary-btn {
+  background: var(--you);
+  color: #06202f;
+}
+
+.secondary-btn {
+  background: transparent;
+  color: var(--text);
+  border: 1.5px solid #334155;
+}
+
+.progress-track {
+  height: 10px;
+  background: #0b1220;
+  border-radius: 999px;
+  overflow: hidden;
+  margin: 14px 0;
+}
+
+.progress-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--you);
+  transition: width 0.1s linear;
+}
+
+.speaker-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  margin-bottom: 18px;
+}
+
+.speaker-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.95rem;
+  margin-bottom: 6px;
+}
+
+.speaker-time {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.bar-track {
+  height: 22px;
+  background: #0b1220;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  width: 0%;
+  transition: width 0.3s ease-out, background-color 0.6s ease;
+}
+
+.you-bar { background: var(--you); }
+.you-bar.alert {
+  background: var(--you-alert);
+  animation: gentle-pulse 1.8s ease-in-out infinite;
+}
+
+.other-bar { background: var(--other); }
+
+.speaker-pct {
+  text-align: right;
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-top: 4px;
+}
+
+/* Slow, smooth pulse rather than a fast blink — a hard flash is
+   overstimulating; this stays noticeable without being alarming. */
+@keyframes gentle-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+.streak-banner {
+  background: #3a2412;
+  border: 1px solid var(--you-alert);
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 0.95rem;
+  margin-bottom: 12px;
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: flex-end;
+  z-index: 10;
+}
+
+.sheet {
+  background: var(--card-bg);
+  width: 100%;
+  border-radius: 20px 20px 0 0;
+  padding: 24px 20px calc(24px + env(safe-area-inset-bottom));
+}
+
+.sheet h2 {
+  margin-top: 0;
+}
+
+.field {
+  display: block;
+  margin-bottom: 16px;
+  font-size: 0.95rem;
+}
+
+.field span {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted);
+}
+
+.field select {
+  width: 100%;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid #334155;
+  background: #0b1220;
+  color: var(--text);
+  font-size: 1rem;
+}
+
+.checkbox-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.checkbox-field span { margin-bottom: 0; }
+
+.checkbox-field input {
+  width: 22px;
+  height: 22px;
+}
+
+[hidden] { display: none !important; }

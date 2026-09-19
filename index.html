@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0f172a" />
+<title>Talk Timer</title>
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" href="icons/icon-192.png" />
+<link rel="apple-touch-icon" href="icons/icon-192.png" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<header class="app-header">
+  <h1>Talk Timer</h1>
+  <button id="settingsBtn" class="icon-btn" aria-label="Settings" title="Settings">⚙</button>
+</header>
+
+<main>
+
+  <!-- STEP 1: permission / intro -->
+  <section id="introCard" class="card">
+    <p>This tracks how long <strong>you</strong> spend talking in a conversation and gives you a gentle nudge when it might be time to pause.</p>
+    <p class="privacy-note">Nothing is ever recorded, saved, or sent anywhere. Audio is only measured for loudness, moment to moment, and immediately discarded.</p>
+    <button id="micBtn" class="primary-btn">Allow microphone &amp; continue</button>
+    <p id="micError" class="error-text" hidden></p>
+  </section>
+
+  <!-- STEP 2: calibration -->
+  <section id="calibrateCard" class="card" hidden>
+    <h2>Quick calibration</h2>
+    <p id="calibrateInstructions">Stay quiet for a moment so I can learn the room's background noise.</p>
+    <div class="progress-track"><div id="calibrateProgress" class="progress-fill"></div></div>
+    <button id="calibrateBtn" class="primary-btn">Start calibration</button>
+  </section>
+
+  <!-- STEP 3: live tracking -->
+  <section id="liveCard" class="card" hidden>
+
+    <div class="speaker-row">
+      <div class="speaker-label">
+        <span>You</span>
+        <span id="youTime" class="speaker-time">0:00</span>
+      </div>
+      <div class="bar-track">
+        <div id="youBar" class="bar-fill you-bar"></div>
+      </div>
+      <div id="youPct" class="speaker-pct">0%</div>
+    </div>
+
+    <div class="speaker-row">
+      <div class="speaker-label">
+        <span>Others</span>
+        <span id="otherTime" class="speaker-time">0:00</span>
+      </div>
+      <div class="bar-track">
+        <div id="otherBar" class="bar-fill other-bar"></div>
+      </div>
+      <div id="otherPct" class="speaker-pct">0%</div>
+    </div>
+
+    <div id="streakBanner" class="streak-banner" hidden>
+      <span id="streakText"></span>
+    </div>
+
+    <button id="stopBtn" class="secondary-btn">End conversation</button>
+  </section>
+
+  <!-- session summary, cleared on close -->
+  <section id="summaryCard" class="card" hidden>
+    <h2>Session summary</h2>
+    <p id="summaryText"></p>
+    <p class="privacy-note">This summary only lives on screen right now — closing or refreshing the page clears it completely.</p>
+    <button id="newSessionBtn" class="primary-btn">Start a new conversation</button>
+  </section>
+
+</main>
+
+<!-- settings panel -->
+<div id="settingsOverlay" class="overlay" hidden>
+  <div class="sheet">
+    <h2>Settings</h2>
+
+    <label class="field">
+      <span>Nudge me after talking non-stop for</span>
+      <select id="streakThreshold">
+        <option value="20">20 seconds</option>
+        <option value="30">30 seconds</option>
+        <option value="45" selected>45 seconds</option>
+        <option value="60">60 seconds</option>
+        <option value="90">90 seconds</option>
+      </select>
+    </label>
+
+    <label class="field">
+      <span>Also flag it if I'm talking more than</span>
+      <select id="shareThreshold">
+        <option value="0.4">40% of the conversation</option>
+        <option value="0.5" selected>50% of the conversation</option>
+        <option value="0.6">60% of the conversation</option>
+        <option value="0.7">70% of the conversation</option>
+      </select>
+    </label>
+
+    <label class="field checkbox-field">
+      <input type="checkbox" id="vibrateToggle" checked />
+      <span>Vibrate on nudge</span>
+    </label>
+
+    <button id="recalibrateBtn" class="secondary-btn">Recalibrate my voice</button>
+    <button id="closeSettingsBtn" class="primary-btn">Done</button>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
