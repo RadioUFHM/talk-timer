@@ -1,4 +1,4 @@
-const CACHE_NAME = "talk-timer-v1";
+const CACHE_NAME = "talk-timer-v2";
 const SHELL_FILES = [
   "./index.html",
   "./styles.css",

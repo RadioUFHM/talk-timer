@@ -64,21 +64,45 @@ let analyser = null;
 let micStream = null;
 let timeDomainData = null;
 
-let noiseFloor = 0.01;   // typical RMS with nobody talking nearby
-let selfLevel = 0.05;    // typical RMS when this device's owner talks
-let silenceThreshold = 0.015;
-let selfThreshold = 0.03;
+// Thresholds live in dBFS (20*log10(rms)), not raw RMS. Sound pressure
+// falls off with distance, so a quieter, farther-away speaker can be
+// many times smaller in linear RMS while only ~10-15dB down — a linear
+// split between noise floor and your own voice collapses everyone
+// else's speech down near the noise floor. dB space keeps that gap
+// meaningful and matches how a 3-point calibration below is spaced.
+let silenceThresholdDb = -55;
+let selfThresholdDb = -30;
+
+function toDb(rms) {
+  return 20 * Math.log10(Math.max(rms, 1e-6));
+}
 
 async function requestMic() {
-  micStream = await navigator.mediaDevices.getUserMedia({
-    audio: {
-      // These normalize/compress loudness, which would erase the very
-      // loudness gap ("you" vs "everyone else") this app relies on.
-      echoCancellation: false,
-      noiseSuppression: false,
-      autoGainControl: false,
-    },
-  });
+  const baseConstraints = {
+    echoCancellation: false,
+    noiseSuppression: false,
+    autoGainControl: false,
+  };
+  try {
+    // Legacy Chrome-only flags: on some Android builds the standard
+    // constraints above only disable WebRTC's software processing while
+    // the OS audio path still runs hardware AEC/NS/AGC (tuned for voice
+    // calls, i.e. tuned to suppress anything that isn't close to the
+    // mic). These aren't part of the spec and are silently ignored where
+    // unsupported, so they're safe to always send.
+    micStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        ...baseConstraints,
+        googEchoCancellation: false,
+        googAutoGainControl: false,
+        googNoiseSuppression: false,
+        googHighpassFilter: false,
+        googTypingNoiseDetection: false,
+      },
+    });
+  } catch (err) {
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: baseConstraints });
+  }
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   const source = audioCtx.createMediaStreamSource(micStream);
   analyser = audioCtx.createAnalyser();
@@ -113,18 +137,23 @@ async function runCalibration() {
   calibrateBtn.disabled = true;
 
   const quietSamples = await sampleFor(2000, "Stay quiet for a moment…");
-  const talkSamples = await sampleFor(3000, "Now talk normally, like you're chatting…");
+  const selfSamples = await sampleFor(3000, "Now talk normally, like you're chatting…");
+  const otherSamples = await sampleFor(
+    4000,
+    "Now have someone else talk normally, at the distance they'd usually be sitting or standing…"
+  );
 
-  noiseFloor = median(quietSamples);
-  selfLevel = median(talkSamples);
+  const noiseFloorDb = toDb(median(quietSamples));
+  let otherDb = toDb(median(otherSamples));
+  let selfDb = toDb(median(selfSamples));
 
-  // Guard against a too-quiet or unclear calibration pass.
-  if (selfLevel < noiseFloor * 1.3) {
-    selfLevel = noiseFloor * 2.5;
-  }
+  // Guard against an unclear or too-quiet calibration pass rather than
+  // ending up with inverted or overlapping thresholds.
+  if (otherDb < noiseFloorDb + 3) otherDb = noiseFloorDb + 3;
+  if (selfDb < otherDb + 4) selfDb = otherDb + 6;
 
-  silenceThreshold = noiseFloor + (selfLevel - noiseFloor) * 0.2;
-  selfThreshold = noiseFloor + (selfLevel - noiseFloor) * 0.55;
+  silenceThresholdDb = noiseFloorDb + (otherDb - noiseFloorDb) * 0.5;
+  selfThresholdDb = otherDb + (selfDb - otherDb) * 0.5;
 
   calibrateBtn.disabled = false;
   showCard(liveCard);
@@ -180,9 +209,10 @@ let lastVibrateTime = 0;
 let rafHandle = null;
 let lastFrameTime = 0;
 
-function classify(level) {
-  if (level >= selfThreshold) return "you";
-  if (level >= silenceThreshold) return "other";
+function classify(rmsLevel) {
+  const db = toDb(rmsLevel);
+  if (db >= selfThresholdDb) return "you";
+  if (db >= silenceThresholdDb) return "other";
   return "silence";
 }
 
@@ -330,6 +360,7 @@ newSessionBtn.addEventListener("click", () => {
   showCard(calibrateCard);
   calibrateProgress.style.width = "0%";
   calibrateInstructions.textContent = "Stay quiet for a moment so I can learn the room's background noise.";
+  calibrateBtn.disabled = false;
 });
 
 settingsBtn.addEventListener("click", () => (settingsOverlay.hidden = false));
